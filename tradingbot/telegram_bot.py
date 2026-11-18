@@ -1,6 +1,8 @@
 """Bot de Telegram para consultar señales y vigilar oportunidades desde iPhone/Android."""
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 import os
+import threading
 import time
 
 import requests
@@ -10,6 +12,23 @@ from .config import Config
 from .tracker import format_summary, record_signals
 
 log = logging.getLogger("telegram")
+
+
+def _start_health_server():
+    port = int(os.getenv("PORT", "8080"))
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+
+        def log_message(self, *args):
+            pass
+
+    srv = HTTPServer(("0.0.0.0", port), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    log.info(f"Health server escuchando en puerto {port}")
 
 
 def _send(token: str, chat_id: str | int, text: str):
@@ -41,6 +60,7 @@ def run_telegram_bot(cfg: Config):
         raise SystemExit("Falta TELEGRAM_BOT_TOKEN en el archivo .env")
 
     base = f"https://api.telegram.org/bot{token}"
+    _start_health_server()
     offset = 0
     watch_chat: str | None = None
     last_watch_ts = 0.0
